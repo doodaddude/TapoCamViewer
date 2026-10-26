@@ -65,10 +65,36 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
 
 public struct TapoRecordingClip: Identifiable, Codable, Equatable {
     public var id: String { "\(startTime)_\(endTime)" }
-    public var startTime: Int // Unix timestamp
-    public var endTime: Int   // Unix timestamp
+    public var startTime: Int    // Unix timestamp
+    public var endTime: Int      // Unix timestamp
     public var duration: Int { max(0, endTime - startTime) }
-    public var isMotion: Bool
+
+    // Raw SD card video_type (1 = continuous, 2 = motion-triggered recording)
+    public var rawType: Int
+
+    // Enriched event classification from getEvents() detection overlay
+    public var eventCode: Int       // e.g. 6 = Person, 5 = Area Intrusion, 2 = Motion, 1 = Continuous
+    public var eventType: String    // e.g. "Person", "Area Intrusion", "Line Crossing"
+    public var iconName: String     // SF Symbol name
+    public var eventColor: String   // semantic color name from bridge
+
+    // Derived helpers
+    public var isMotion: Bool { rawType == 2 || eventCode > 1 }
+
+    public var badgeColor: EventBadgeColor {
+        switch eventCode {
+        case 6:        return .purple   // Person
+        case 9:        return .green    // Pet
+        case 8:        return .blue     // Vehicle
+        case 5, 3, 13: return .red      // Area Intrusion, Tamper, Glass Break
+        case 4:        return .cyan     // Line Crossing
+        case 7, 11, 12: return .pink   // Baby Cry, Bark, Meow
+        case 10:       return .yellow   // Ring Alarm
+        case 2:        return .orange   // Motion
+        default:       return .secondary // Continuous
+        }
+    }
+
     public var formattedDate: String {
         let date = Date(timeIntervalSince1970: TimeInterval(startTime))
         let df = DateFormatter()
@@ -76,6 +102,7 @@ public struct TapoRecordingClip: Identifiable, Codable, Equatable {
         df.timeStyle = .medium
         return df.string(from: date)
     }
+
     public var timeRangeString: String {
         let d1 = Date(timeIntervalSince1970: TimeInterval(startTime))
         let d2 = Date(timeIntervalSince1970: TimeInterval(endTime))
@@ -84,11 +111,28 @@ public struct TapoRecordingClip: Identifiable, Codable, Equatable {
         return "\(tf.string(from: d1)) - \(tf.string(from: d2))"
     }
 
-    public init(startTime: Int, endTime: Int, isMotion: Bool = false) {
+    public init(
+        startTime: Int,
+        endTime: Int,
+        rawType: Int = 1,
+        eventCode: Int = 1,
+        eventType: String = "Continuous",
+        iconName: String = "film",
+        eventColor: String = "gray"
+    ) {
         self.startTime = startTime
         self.endTime = endTime
-        self.isMotion = isMotion
+        self.rawType = rawType
+        self.eventCode = eventCode
+        self.eventType = eventType
+        self.iconName = iconName
+        self.eventColor = eventColor
     }
+}
+
+/// Semantic badge colours for recording event types
+public enum EventBadgeColor {
+    case purple, green, blue, red, cyan, pink, yellow, orange, secondary
 }
 
 // MARK: - Detection Feature & Alarm Settings Models

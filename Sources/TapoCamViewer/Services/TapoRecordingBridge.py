@@ -19,6 +19,54 @@ except Exception:
 
 from pytapo import Tapo
 
+# ------------------------------------------------------------------
+# Event type mapping from alarm_type integer codes
+# Priority order (highest = most specific / interesting first)
+# ------------------------------------------------------------------
+EVENT_TYPE_PRIORITY = [6, 9, 8, 5, 4, 7, 11, 12, 13, 10, 3, 2, 1]  # highest priority first
+
+EVENT_TYPE_INFO = {
+    1:  {"label": "Continuous",      "icon": "film",                               "color": "gray"},
+    2:  {"label": "Motion",          "icon": "sensor.tag.radiowaves.forward.fill",  "color": "orange"},
+    3:  {"label": "Tamper",          "icon": "shield.exclamationmark.fill",         "color": "red"},
+    4:  {"label": "Line Crossing",   "icon": "arrow.left.and.right.square",         "color": "cyan"},
+    5:  {"label": "Area Intrusion",  "icon": "bell.badge.fill",                    "color": "red"},
+    6:  {"label": "Person",          "icon": "figure.walk",                         "color": "purple"},
+    7:  {"label": "Baby Cry",        "icon": "waveform.path.ecg",                   "color": "pink"},
+    8:  {"label": "Vehicle",         "icon": "car.fill",                            "color": "blue"},
+    9:  {"label": "Pet",             "icon": "pawprint.fill",                       "color": "green"},
+    10: {"label": "Ring Alarm",      "icon": "bell.ring.fill",                      "color": "yellow"},
+    11: {"label": "Bark",            "icon": "speaker.wave.3.fill",                 "color": "brown"},
+    12: {"label": "Meow",            "icon": "cat.fill",                            "color": "orange"},
+    13: {"label": "Glass Break",     "icon": "sparkles.rectangle.stack.fill",       "color": "red"},
+}
+
+def classify_clip(clip_start, clip_end, events):
+    """
+    Given a clip's [startTime, endTime] and a list of detection events,
+    find all overlapping events and return the highest-priority event type info.
+    Falls back to 'Continuous' (type 1) if no events overlap.
+    """
+    overlap_types = set()
+    slack = 5  # seconds of tolerance on clip boundaries
+    for ev in events:
+        ev_start = ev.get("start_time", 0)
+        ev_end   = ev.get("end_time", ev_start)
+        alarm_type = ev.get("alarm_type", 2)
+        # Overlap check: events overlap the clip window if they don't end before it starts and don't start after it ends
+        if not (ev_end < clip_start - slack or ev_start > clip_end + slack):
+            overlap_types.add(alarm_type)
+
+    # Pick highest-priority event code
+    for code in EVENT_TYPE_PRIORITY:
+        if code in overlap_types:
+            info = EVENT_TYPE_INFO.get(code, EVENT_TYPE_INFO[2])
+            return code, info["label"], info["icon"], info["color"]
+
+    # Default: use the generic SD clip type if no events matched
+    default_info = EVENT_TYPE_INFO[1]
+    return 1, default_info["label"], default_info["icon"], default_info["color"]
+
 def safe_call(func, *args, **kwargs):
     try:
         return func(*args, **kwargs)
@@ -62,18 +110,51 @@ def main():
 
         elif action == "get_recordings":
             date_str = input_data.get("date", datetime.datetime.now().strftime("%Y%m%d"))
+
+            # Parse the date string to a UTC midnight range for event lookup
+            date_obj = datetime.datetime.strptime(date_str, "%Y%m%d")
+            day_start_ts = int(date_obj.timestamp())
+            day_end_ts   = int((date_obj + datetime.timedelta(hours=23, minutes=59, seconds=59)).timestamp())
+
+            # Fetch SD card clip list for the day
             results_raw = tapo.getRecordings(date_str)
+
+            # Fetch detection events for the entire day to enrich each clip
+            events = []
+            try:
+                events = tapo.getEvents(startTime=day_start_ts, endTime=day_end_ts)
+            except Exception as ev_err:
+                # Non-fatal: we'll fall back to generic labels if events unavailable
+                pass
+
             clips = []
             for item in results_raw:
                 for k, v in item.items():
                     if "startTime" in v and "endTime" in v:
+                        st = v["startTime"]
+                        et = v["endTime"]
+                        raw_type = v.get("vedio_type", 1)
+
+                        # Classify using detection events
+                        event_code, event_label, icon_name, color = classify_clip(st, et, events)
+
+                        # If the clip is marked as continuous (type 1) and no events overlap → keep Continuous
+                        # If the raw SD type is motion (2) but no specific event found → label as Motion
+                        if event_code == 1 and raw_type == 2:
+                            info = EVENT_TYPE_INFO[2]
+                            event_code, event_label, icon_name, color = 2, info["label"], info["icon"], info["color"]
+
                         clips.append({
-                            "startTime": v["startTime"],
-                            "endTime": v["endTime"],
-                            "duration": v["endTime"] - v["startTime"],
-                            "type": v.get("vedio_type", 1)
+                            "startTime":  st,
+                            "endTime":    et,
+                            "duration":   et - st,
+                            "type":       raw_type,
+                            "eventCode":  event_code,
+                            "eventType":  event_label,
+                            "iconName":   icon_name,
+                            "color":      color,
                         })
-            print(json.dumps({"status": "ok", "date": date_str, "clips": clips}))
+            print(json.dumps({"status": "ok", "date": date_str, "clips": clips, "eventCount": len(events)}))
 
         elif action == "get_alarm_and_detections":
             # Query alarm status & all detection capabilities

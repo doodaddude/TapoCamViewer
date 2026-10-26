@@ -50,37 +50,54 @@ public final class TapoCameraService {
         }
     }
 
-    /// Query the camera for recorded entries from its SD card via TapoRecordingBridge.py
-    public func fetchRecordings(camera: TapoCameraConfig, dateString: String) async -> [TapoRecordingClip] {
+    /// Query the camera for recorded entries from its SD card, enriched with detection event types.
+    /// Returns the clip array and an optional count of raw detection events used for enrichment.
+    public func fetchRecordingsWithEventCount(camera: TapoCameraConfig, dateString: String) async -> ([TapoRecordingClip], Int?) {
         let cleanIP = camera.ipAddress.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanIP.isEmpty else { return [] }
+        guard !cleanIP.isEmpty else { return ([], nil) }
 
         let creds = getPythonCredentials(for: camera)
         let payload: [String: Any] = [
-            "ip": cleanIP,
-            "user": creds.user,
+            "ip":       cleanIP,
+            "user":     creds.user,
             "password": creds.pass,
-            "date": dateString
+            "date":     dateString
         ]
 
         guard let json = await executeBridge(action: "get_recordings", payload: payload),
               let clipsArray = json["clips"] as? [[String: Any]] else {
-            return []
+            return ([], nil)
         }
+
+        let eventCount = json["eventCount"] as? Int
 
         var result: [TapoRecordingClip] = []
         for item in clipsArray {
             if let st = item["startTime"] as? Int,
                let et = item["endTime"] as? Int {
-                let isMotion = (item["type"] as? Int ?? 1) == 2
+                let rawType   = item["type"]      as? Int    ?? 1
+                let eventCode = item["eventCode"] as? Int    ?? 1
+                let eventType = item["eventType"] as? String ?? "Continuous"
+                let iconName  = item["iconName"]  as? String ?? "film"
+                let color     = item["color"]     as? String ?? "gray"
                 result.append(TapoRecordingClip(
-                    startTime: st,
-                    endTime: et,
-                    isMotion: isMotion
+                    startTime:  st,
+                    endTime:    et,
+                    rawType:    rawType,
+                    eventCode:  eventCode,
+                    eventType:  eventType,
+                    iconName:   iconName,
+                    eventColor: color
                 ))
             }
         }
-        return result
+        return (result, eventCount)
+    }
+
+    /// Legacy variant — delegates to enriched version.
+    public func fetchRecordings(camera: TapoCameraConfig, dateString: String) async -> [TapoRecordingClip] {
+        let (clips, _) = await fetchRecordingsWithEventCount(camera: camera, dateString: dateString)
+        return clips
     }
 
     /// Fetch Alarm status and all detection capabilities from the Tapo Camera
