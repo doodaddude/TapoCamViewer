@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+build/
+*.xcuserstate
+xcuserdata/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Local camera credentials & runtime caches
+*.log
+tapo_credentials.json
+go2rtc.yaml
