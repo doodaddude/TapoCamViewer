@@ -75,3 +75,16 @@ else
 fi
 
 echo "Built and signed ${APP_DIR} successfully!"
+
+if [ "$1" == "--install" ] || [ "$2" == "--install" ]; then
+    echo "Installing to /Applications/TapoCamViewer.app..."
+    pkill -x TapoCamViewer 2>/dev/null || true
+    sleep 1
+    rm -rf "/Applications/${APP_NAME}"
+    cp -R "${APP_DIR}" "/Applications/${APP_NAME}"
+    echo "Installed to /Applications/${APP_NAME} successfully!"
+    if [ "$1" == "--launch" ] || [ "$2" == "--launch" ]; then
+        echo "Launching /Applications/${APP_NAME}..."
+        open "/Applications/${APP_NAME}"
+    fi
+fi
