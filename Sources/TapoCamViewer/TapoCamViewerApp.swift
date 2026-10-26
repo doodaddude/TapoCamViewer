@@ -12,9 +12,63 @@ struct TapoCamViewerApp: App {
     }
 }
 
+/// Custom NSPanel for the floating camera HUD.
+/// We override close/performClose to hide (orderOut) instead of actually closing,
+/// preventing the window from being released while we hold a strong ref in the controller.
+final class TapoFloatingWindow: NSPanel {
+    override init(
+        contentRect: NSRect,
+        styleMask style: NSWindow.StyleMask,
+        backing backingStoreType: NSWindow.BackingStoreType,
+        defer flag: Bool
+    ) {
+        super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
+        self.isFloatingPanel = true
+        self.level = .floating
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.hasShadow = true
+        self.isMovableByWindowBackground = true
+        self.titlebarAppearsTransparent = true
+        self.titleVisibility = .hidden
+        // Never release on close — we manage lifetime via NSWindowController
+        self.isReleasedWhenClosed = false
+    }
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+
+    override func performClose(_ sender: Any?) {
+        // Hide, don't close/release
+        self.orderOut(nil)
+    }
+
+    override func close() {
+        // Hide, don't close/release
+        self.orderOut(nil)
+    }
+
+    deinit {
+        NSLog("⚠️ TapoFloatingWindow deinit — window was deallocated!")
+    }
+}
+
+/// NSWindowController subclass that owns the floating camera HUD window.
+/// AppKit keeps the window alive as long as the controller is alive — this is the
+/// canonical way to keep programmatically-created windows from being deallocated.
+final class FloatingWindowController: NSWindowController {
+    deinit {
+        NSLog("ℹ️ FloatingWindowController deinit")
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
-    private var floatingWindow: NSWindow?
+    /// Strong reference to the window controller keeps the panel alive indefinitely.
+    private var floatingWindowController: FloatingWindowController?
+    /// Convenience accessor — non-nil whenever the controller exists.
+    private var floatingWindow: TapoFloatingWindow? { floatingWindowController?.window as? TapoFloatingWindow }
     private var settingsWindow: NSWindow?
 
     @AppStorage("tapo_cameras_json") private var savedCamerasJson: String = ""
@@ -157,23 +211,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // MARK: - Floating Cam Window
     private func setupFloatingWindow() {
-        let window = NSWindow(
+        let panel = TapoFloatingWindow(
             contentRect: NSRect(x: 100, y: 100, width: 620, height: 420),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        window.title = "Tapo Cam Viewer"
-        window.titleVisibility = .hidden
-        window.titlebarAppearsTransparent = true
-        window.isMovableByWindowBackground = true
-        window.level = .floating
-        window.isOpaque = false
-        window.backgroundColor = .clear
-        window.hasShadow = true
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        window.delegate = self
-        window.isReleasedWhenClosed = false
+        panel.title = "Tapo Cam Viewer"
+        panel.delegate = self
 
         let binding = Binding<[TapoCameraConfig]>(
             get: { self.cameras },
@@ -183,28 +228,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let root = MainFloatingViewer(cameras: binding, onOpenSettings: { [weak self] in
             self?.openSettingsWindow()
         })
-        window.contentView = NSHostingView(rootView: root)
-        window.center()
-        window.makeKeyAndOrderFront(nil)
+        panel.contentView = NSHostingView(rootView: root)
+        panel.center()
 
-        self.floatingWindow = window
+        // Create the controller — it retains the panel strongly.
+        let wc = FloatingWindowController(window: panel)
+        self.floatingWindowController = wc
+
+        wc.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     @objc private func toggleFloatingWindow() {
-        guard let w = floatingWindow else {
+        guard let wc = floatingWindowController, let w = wc.window else {
+            // No controller yet (first launch) — create everything.
             setupFloatingWindow()
             return
         }
         if w.isVisible {
             w.orderOut(nil)
         } else {
-            w.makeKeyAndOrderFront(nil)
+            wc.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
         }
     }
 
     @objc private func openSettingsWindow() {
         if let existing = settingsWindow {
+            positionSettingsWindow(existing)
+            existing.level = .floating
             existing.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
@@ -217,6 +269,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             defer: false
         )
         window.title = "Tapo Camera Settings & Preferences"
+        window.level = .floating // Float on top of the camera HUD!
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+
+        positionSettingsWindow(window)
 
         let binding = Binding<[TapoCameraConfig]>(
             get: { self.cameras },
@@ -231,32 +288,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         })
         window.contentView = NSHostingView(rootView: settingsView)
-        window.delegate = self
-        window.isReleasedWhenClosed = false
-        window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
         self.settingsWindow = window
     }
 
+    private func positionSettingsWindow(_ window: NSWindow) {
+        if let camWin = floatingWindow, camWin.isVisible {
+            let camFrame = camWin.frame
+            let screen = camWin.screen ?? NSScreen.main
+            let screenFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+            let winWidth: CGFloat = 640
+            let winHeight: CGFloat = 530
+
+            // Position beside camera window (to the right if space permits, else to the left)
+            var targetX = camFrame.maxX + 14
+            var targetY = camFrame.maxY - winHeight
+
+            if targetX + winWidth > screenFrame.maxX {
+                targetX = camFrame.minX - winWidth - 14
+            }
+            if targetX < screenFrame.minX {
+                targetX = screenFrame.midX - (winWidth / 2)
+                targetY = screenFrame.midY - (winHeight / 2)
+            }
+            window.setFrameOrigin(NSPoint(x: targetX, y: max(screenFrame.minY, min(targetY, screenFrame.maxY - winHeight))))
+        } else {
+            window.center()
+        }
+    }
+
     // MARK: - NSWindowDelegate
+
+    /// Called by AppKit before a window closes. Returning false prevents the close.
+    /// NOTE: NSWindowDelegate declares this as `(_ sender: NSWindow) -> Bool` — do NOT
+    /// change the type to `Any`; that creates a different method that Swift never bridges
+    /// to the delegate protocol.
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if sender == floatingWindow {
+        if sender === floatingWindow {
+            // Intercept: hide instead of close so the window is never released.
             sender.orderOut(nil)
-            return false // Intercept close: smoothly hide instead of destroying/releasing the window
+            return false
         }
         return true
     }
 
     func windowWillClose(_ notification: Notification) {
-        if let win = notification.object as? NSWindow {
-            if win == settingsWindow {
-                settingsWindow = nil
-            } else if win == floatingWindow {
-                floatingWindow = nil
-            }
+        // Only nil out settingsWindow when it actually closes (we allow that).
+        if let win = notification.object as? NSWindow, win === settingsWindow {
+            settingsWindow = nil
         }
+        // Do NOT nil floatingWindowController here — the floating window should never
+        // reach windowWillClose because windowShouldClose intercepts it above.
     }
 
     @objc private func openRecordingsFolder() {
