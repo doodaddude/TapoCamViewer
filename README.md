@@ -1,7 +1,7 @@
 # 📹 TapoCamViewer for macOS
 
 <p align="center">
-  <img src="Resources/AppIcon.icns" alt="TapoCamViewer Icon" width="128" height="128" style="border-radius: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
+  <img src="Resources/AppIcon.png" alt="TapoCamViewer Icon" width="128" height="128" style="border-radius: 28px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);" />
 </p>
 
 <p align="center">
