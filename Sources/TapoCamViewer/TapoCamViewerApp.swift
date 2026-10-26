@@ -172,6 +172,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        window.delegate = self
+        window.isReleasedWhenClosed = false
 
         let binding = Binding<[TapoCameraConfig]>(
             get: { self.cameras },
@@ -238,9 +240,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.settingsWindow = window
     }
 
+    // MARK: - NSWindowDelegate
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if sender == floatingWindow {
+            sender.orderOut(nil)
+            return false // Intercept close: smoothly hide instead of destroying/releasing the window
+        }
+        return true
+    }
+
     func windowWillClose(_ notification: Notification) {
-        if let win = notification.object as? NSWindow, win == settingsWindow {
-            settingsWindow = nil
+        if let win = notification.object as? NSWindow {
+            if win == settingsWindow {
+                settingsWindow = nil
+            } else if win == floatingWindow {
+                floatingWindow = nil
+            }
         }
     }
 
