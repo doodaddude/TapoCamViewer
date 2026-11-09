@@ -15,6 +15,7 @@ public enum StreamQuality: String, Codable, CaseIterable {
 public struct TapoCameraConfig: Identifiable, Codable, Equatable {
     public var id: String
     public var cameraNumber: Int
+    public var iconName: String
     public var name: String
     public var ipAddress: String
     public var port: Int
@@ -28,6 +29,7 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
     public init(
         id: String = UUID().uuidString,
         cameraNumber: Int = 1,
+        iconName: String = "video.fill",
         name: String,
         ipAddress: String,
         port: Int = 554,
@@ -40,6 +42,7 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
     ) {
         self.id = id
         self.cameraNumber = cameraNumber
+        self.iconName = iconName
         self.name = name
         self.ipAddress = ipAddress
         self.port = port
@@ -52,13 +55,14 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, cameraNumber, name, ipAddress, port, username, password, cloudPassword, quality, isEnabled, customRTSPUrl
+        case id, cameraNumber, iconName, name, ipAddress, port, username, password, cloudPassword, quality, isEnabled, customRTSPUrl
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try container.decode(String.self, forKey: .id)
         self.cameraNumber = try container.decodeIfPresent(Int.self, forKey: .cameraNumber) ?? 1
+        self.iconName = try container.decodeIfPresent(String.self, forKey: .iconName) ?? "video.fill"
         self.name = try container.decode(String.self, forKey: .name)
         self.ipAddress = try container.decode(String.self, forKey: .ipAddress)
         self.port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 554
@@ -83,6 +87,64 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
         }
         return "rtsp://\(cleanUser):\(cleanPass)@\(cleanIP):\(port)/\(quality.streamPath)#transport=tcp"
     }
+}
+
+public struct CameraIconOption: Identifiable, Hashable {
+    public var id: String { symbol }
+    public let symbol: String
+    public let label: String
+    public let category: String
+
+    public init(_ symbol: String, label: String, category: String) {
+        self.symbol = symbol
+        self.label = label
+        self.category = category
+    }
+}
+
+public struct CameraIconLibrary {
+    public static let options: [CameraIconOption] = [
+        // Camera & Security
+        CameraIconOption("video.fill", label: "Video", category: "Cameras"),
+        CameraIconOption("camera.fill", label: "Camera", category: "Cameras"),
+        CameraIconOption("web.camera.fill", label: "Webcam", category: "Cameras"),
+        CameraIconOption("video.doorbell.fill", label: "Doorbell", category: "Cameras"),
+        CameraIconOption("eye.fill", label: "Surveillance", category: "Cameras"),
+        CameraIconOption("shield.fill", label: "Shield", category: "Cameras"),
+        CameraIconOption("sensor.fill", label: "Sensor", category: "Cameras"),
+
+        // Entrances & Doors
+        CameraIconOption("door.front.left", label: "Front Door", category: "Entrances"),
+        CameraIconOption("door.left.hand.open", label: "Open Door", category: "Entrances"),
+        CameraIconOption("bell.fill", label: "Chime", category: "Entrances"),
+        CameraIconOption("key.fill", label: "Key Entry", category: "Entrances"),
+        CameraIconOption("lock.fill", label: "Lock", category: "Entrances"),
+
+        // Rooms & Spaces
+        CameraIconOption("sofa.fill", label: "Living Room", category: "Rooms"),
+        CameraIconOption("tv.fill", label: "TV / Den", category: "Rooms"),
+        CameraIconOption("bed.double.fill", label: "Bedroom", category: "Rooms"),
+        CameraIconOption("bed.single.fill", label: "Guest Room", category: "Rooms"),
+        CameraIconOption("fork.knife", label: "Kitchen", category: "Rooms"),
+        CameraIconOption("cup.and.saucer.fill", label: "Dining", category: "Rooms"),
+        CameraIconOption("lamp.desk.fill", label: "Office", category: "Rooms"),
+        CameraIconOption("desktopcomputer", label: "Desk", category: "Rooms"),
+        CameraIconOption("stairs", label: "Stairs / Hall", category: "Rooms"),
+
+        // Family & Pets
+        CameraIconOption("figure.child", label: "Kids Room", category: "Family"),
+        CameraIconOption("figure.and.child.holdinghands", label: "Nursery", category: "Family"),
+        CameraIconOption("teddybear.fill", label: "Playroom", category: "Family"),
+        CameraIconOption("pawprint.fill", label: "Pet Area", category: "Family"),
+
+        // Outdoors & Vehicles
+        CameraIconOption("car.fill", label: "Driveway", category: "Outdoors"),
+        CameraIconOption("car.side.fill", label: "Garage", category: "Outdoors"),
+        CameraIconOption("tree.fill", label: "Backyard", category: "Outdoors"),
+        CameraIconOption("leaf.fill", label: "Garden", category: "Outdoors"),
+        CameraIconOption("sun.max.fill", label: "Patio / Deck", category: "Outdoors"),
+        CameraIconOption("house.fill", label: "House Front", category: "Outdoors")
+    ]
 }
 
 public enum TapoStreamState: Equatable {

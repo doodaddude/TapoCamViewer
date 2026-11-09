@@ -68,26 +68,30 @@ public struct MainFloatingViewer: View {
                         .fill(.ultraThinMaterial)
                 )
 
-                // Quick Camera Number Switcher for Single View
+                // Quick Camera Icon & Number Switcher for Single View
                 if gridMode == .single && activeCameras.count > 1 {
                     HStack(spacing: 4) {
                         ForEach(Array(activeCameras.enumerated()), id: \.element.id) { index, cam in
                             Button {
                                 activeCameraIndex = index
                             } label: {
-                                Text("Cam \(cam.cameraNumber)")
-                                    .font(.system(size: 10, weight: activeCameraIndex == index ? .heavy : .semibold))
-                                    .foregroundStyle(activeCameraIndex == index ? Color(red: 0.0, green: 0.85, blue: 0.95) : Color.white.opacity(0.7))
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3.5)
-                                    .background(
-                                        Capsule()
-                                            .fill(activeCameraIndex == index ? Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.25) : Color.white.opacity(0.06))
-                                            .overlay(
-                                                Capsule()
-                                                    .stroke(activeCameraIndex == index ? Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.5) : Color.white.opacity(0.1), lineWidth: 0.8)
-                                            )
-                                    )
+                                HStack(spacing: 4.5) {
+                                    Image(systemName: cam.iconName)
+                                        .font(.system(size: 10.5, weight: .bold))
+                                    Text("Cam \(cam.cameraNumber)")
+                                        .font(.system(size: 10, weight: activeCameraIndex == index ? .heavy : .semibold))
+                                }
+                                .foregroundStyle(activeCameraIndex == index ? Color(red: 0.0, green: 0.85, blue: 0.95) : Color.white.opacity(0.75))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(activeCameraIndex == index ? Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.25) : Color.white.opacity(0.08))
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(activeCameraIndex == index ? Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.6) : Color.white.opacity(0.12), lineWidth: 0.8)
+                                        )
+                                )
                             }
                             .buttonStyle(.plain)
                         }
@@ -281,9 +285,14 @@ public struct MainFloatingViewer: View {
                 Spacer()
 
                 if let cam = activeCameras.indices.contains(activeCameraIndex) ? activeCameras[activeCameraIndex] : activeCameras.first {
-                    Text("Cam \(cam.cameraNumber) • \(cam.name) (\(cam.ipAddress))")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.white.opacity(0.6))
+                    HStack(spacing: 5) {
+                        Image(systemName: cam.iconName)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
+                        Text("Cam \(cam.cameraNumber) • \(cam.name) (\(cam.ipAddress))")
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
                 }
             }
             .padding(.horizontal, 10)
@@ -449,51 +458,37 @@ public struct CameraViewportCell: View {
                 streamState: $streamState
             )
 
-            // When stream is stalled or disconnected, show the Large Resume Button
+            // When stream is stalled or disconnected, show a sleek, non-intrusive floating Resume pill
             if streamState.isStalledOrDisconnected {
-                Color.black.opacity(0.80)
-                    .transition(.opacity)
-
-                Button {
-                    reloadStream()
-                } label: {
-                    VStack(spacing: 12) {
-                        ZStack {
-                            Circle()
-                                .fill(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.18))
-                                .frame(width: 68, height: 68)
-                            Circle()
-                                .stroke(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.85), lineWidth: 2)
-                                .frame(width: 68, height: 68)
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 28, weight: .bold))
+                VStack {
+                    Spacer()
+                    Button {
+                        reloadStream()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise.circle.fill")
+                                .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
-                                .offset(x: 2.5)
-                        }
-
-                        VStack(spacing: 4) {
-                            Text("Live Stream Paused")
-                                .font(.system(size: 14.5, weight: .bold))
+                            Text("Resume Cam \(camera.cameraNumber)")
+                                .font(.system(size: 11, weight: .bold))
                                 .foregroundStyle(.white)
-                            Text("Click to Resume Cam \(camera.cameraNumber)")
-                                .font(.system(size: 11.5, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.75))
                         }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule()
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.6), lineWidth: 1)
+                                )
+                                .shadow(color: .black.opacity(0.5), radius: 8, y: 2)
+                        )
                     }
-                    .padding(.horizontal, 26)
-                    .padding(.vertical, 20)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18)
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 18)
-                                    .stroke(Color.white.opacity(0.22), lineWidth: 1)
-                            )
-                            .shadow(color: .black.opacity(0.65), radius: 14, y: 5)
-                    )
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 12)
                 }
-                .buttonStyle(.plain)
-                .transition(.scale(scale: 0.95).combined(with: .opacity))
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
             // Connecting Spinner
@@ -522,7 +517,11 @@ public struct CameraViewportCell: View {
                             .frame(width: 6.5, height: 6.5)
                             .shadow(color: statusColor.opacity(0.8), radius: 3)
 
-                        // Camera Number Badge
+                        // Camera Icon & Number Badge
+                        Image(systemName: camera.iconName)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
+
                         Text("Cam \(camera.cameraNumber)")
                             .font(.system(size: 9.5, weight: .heavy, design: .rounded))
                             .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
@@ -585,11 +584,6 @@ public struct CameraViewportCell: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             streamState = .connecting
             reloadTrigger = UUID()
-        }
-        Task { @MainActor in
-            if !Go2rtcServerManager.shared.isRunning {
-                Go2rtcServerManager.shared.start(cameras: [camera])
-            }
         }
     }
 }

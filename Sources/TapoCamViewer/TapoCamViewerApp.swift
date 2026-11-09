@@ -389,6 +389,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 list[i].cameraNumber = i + 1
                 needsResave = true
             }
+            if list[i].iconName.isEmpty {
+                list[i].iconName = "video.fill"
+                needsResave = true
+            }
             seen.insert(list[i].cameraNumber)
         }
         list.sort { $0.cameraNumber < $1.cameraNumber }

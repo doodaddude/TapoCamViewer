@@ -135,14 +135,10 @@ public struct TapoWebRTCPlayerView: NSViewRepresentable {
                             notify('playing', 'video playing');
                         });
 
-                        video.addEventListener('pause', function() {
-                            if (!video.seeking && !video.ended) {
-                                notify('stalled', 'video paused');
-                            }
-                        });
-
                         video.addEventListener('ended', function() {
-                            notify('stalled', 'stream ended');
+                            if (hasPlayed) {
+                                notify('stalled', 'stream ended');
+                            }
                         });
 
                         video.addEventListener('error', function(e) {
@@ -159,52 +155,28 @@ public struct TapoWebRTCPlayerView: NSViewRepresentable {
                             }
                         }
 
-                        if (!video) {
-                            initialTicks++;
-                            if (initialTicks > 8) {
-                                notify('disconnected', 'player initialization timeout');
-                            }
-                            return;
-                        }
+                        if (!video) return;
 
                         hookVideo(video);
 
-                        if (video.ended) {
+                        if (video.ended && hasPlayed) {
                             notify('stalled', 'video ended');
                             return;
                         }
 
-                        if (video.paused && !video.seeking) {
-                            frozenTicks++;
-                            if (frozenTicks >= 2) {
-                                notify('stalled', 'stream paused');
-                            }
-                            return;
-                        }
-
-                        if (video.readyState >= 2 && video.currentTime > 0) {
+                        if (video.currentTime > 0) {
                             if (video.currentTime === lastTime) {
-                                frozenTicks++;
-                                if (frozenTicks >= 4) {
-                                    notify('stalled', 'frame frozen');
+                                if (hasPlayed && !video.paused) {
+                                    frozenTicks++;
+                                    if (frozenTicks >= 8) {
+                                        notify('stalled', 'frame frozen');
+                                    }
                                 }
                             } else {
                                 lastTime = video.currentTime;
                                 frozenTicks = 0;
-                                if (!hasPlayed) {
-                                    hasPlayed = true;
-                                }
+                                hasPlayed = true;
                                 notify('playing', 'active playback');
-                            }
-                        } else if (!hasPlayed) {
-                            initialTicks++;
-                            if (initialTicks > 12) {
-                                notify('disconnected', 'waiting for video stream timeout');
-                            }
-                        } else {
-                            frozenTicks++;
-                            if (frozenTicks >= 4) {
-                                notify('stalled', 'insufficient video data');
                             }
                         }
                     }, 1000);

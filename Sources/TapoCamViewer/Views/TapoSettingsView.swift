@@ -46,6 +46,7 @@ public struct TapoSettingsView: View {
     // Camera Edit States
     @State private var selectedCamID: String?
     @State private var cameraNumber: Int = 1
+    @State private var iconName: String = "video.fill"
     @State private var name: String = ""
     @State private var ipAddress: String = ""
     @State private var port: Int = 554
@@ -151,20 +152,24 @@ public struct TapoSettingsView: View {
                                 .fill(cam.isEnabled ? Color.green : Color.gray)
                                 .frame(width: 7, height: 7)
 
-                            // Camera Number Capsule Badge
-                            Text("Cam \(cam.cameraNumber)")
-                                .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2.5)
-                                .background(
-                                    Capsule()
-                                        .fill(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.15))
-                                        .overlay(
-                                            Capsule()
-                                                .stroke(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.4), lineWidth: 0.8)
-                                        )
-                                )
+                            // Camera Icon & Number Badge
+                            HStack(spacing: 4) {
+                                Image(systemName: cam.iconName)
+                                    .font(.system(size: 10, weight: .bold))
+                                Text("Cam \(cam.cameraNumber)")
+                                    .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            }
+                            .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2.5)
+                            .background(
+                                Capsule()
+                                    .fill(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.15))
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.4), lineWidth: 0.8)
+                                    )
+                            )
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(cam.name.isEmpty ? "Unnamed Cam" : cam.name)
@@ -183,13 +188,13 @@ public struct TapoSettingsView: View {
                 }
                 .listStyle(.sidebar)
             }
-            .frame(minWidth: 200)
+            .frame(minWidth: 220)
         } detail: {
             if let id = selectedCamID, let _ = cameras.first(where: { $0.id == id }) {
                 Form {
-                    Section("Camera Identification & Number") {
+                    Section("Camera Identification & Icon") {
                         HStack {
-                            Text("Camera Number Assignment")
+                            Text("Camera Number")
                                 .font(.system(size: 13, weight: .medium))
                             Spacer()
                             Picker("", selection: $cameraNumber) {
@@ -202,6 +207,65 @@ public struct TapoSettingsView: View {
 
                         TextField("Camera Name", text: $name)
                         Toggle("Enable Camera", isOn: $isEnabled)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Camera Icon:")
+                                    .font(.system(size: 13, weight: .medium))
+                                HStack(spacing: 6) {
+                                    Image(systemName: iconName)
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
+                                    Text(CameraIconLibrary.options.first(where: { $0.symbol == iconName })?.label ?? "Custom")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(
+                                    Capsule()
+                                        .fill(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.15))
+                                        .overlay(Capsule().stroke(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.4), lineWidth: 1))
+                                )
+                            }
+                            .padding(.top, 4)
+
+                            Text("Tap an icon to represent your camera location or room:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            // Curated SF Symbols Grid
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 44), spacing: 6)], spacing: 6) {
+                                ForEach(CameraIconLibrary.options) { option in
+                                    Button {
+                                        iconName = option.symbol
+                                    } label: {
+                                        VStack(spacing: 2) {
+                                            Image(systemName: option.symbol)
+                                                .font(.system(size: 16))
+                                                .frame(width: 34, height: 26)
+                                                .foregroundStyle(iconName == option.symbol ? Color(red: 0.0, green: 0.85, blue: 0.95) : Color.primary.opacity(0.75))
+                                            Text(option.label)
+                                                .font(.system(size: 8.5))
+                                                .lineLimit(1)
+                                                .foregroundStyle(iconName == option.symbol ? Color(red: 0.0, green: 0.85, blue: 0.95) : Color.secondary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 5)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(iconName == option.symbol ? Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.18) : Color.primary.opacity(0.04))
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(iconName == option.symbol ? Color(red: 0.0, green: 0.85, blue: 0.95) : Color.primary.opacity(0.1), lineWidth: iconName == option.symbol ? 1.5 : 0.8)
+                                                )
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("\(option.label) (\(option.category))")
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
 
                     Section("Network Connection") {
@@ -615,6 +679,7 @@ public struct TapoSettingsView: View {
         let nextNum = (cameras.map(\.cameraNumber).max() ?? 0) + 1
         let newCam = TapoCameraConfig(
             cameraNumber: nextNum,
+            iconName: "video.fill",
             name: "Tapo Cam \(nextNum)",
             ipAddress: ""
         )
@@ -636,6 +701,7 @@ public struct TapoSettingsView: View {
     private func loadSelectedCam(_ id: String?) {
         guard let id = id, let cam = cameras.first(where: { $0.id == id }) else { return }
         cameraNumber = cam.cameraNumber
+        iconName = cam.iconName
         name = cam.name
         ipAddress = cam.ipAddress
         port = cam.port
@@ -650,6 +716,7 @@ public struct TapoSettingsView: View {
     private func applyChanges() {
         guard let id = selectedCamID, let idx = cameras.firstIndex(where: { $0.id == id }) else { return }
         cameras[idx].cameraNumber = cameraNumber
+        cameras[idx].iconName = iconName
         cameras[idx].name = name
         cameras[idx].ipAddress = ipAddress
         cameras[idx].port = port
