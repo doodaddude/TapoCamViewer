@@ -100,8 +100,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setupStatusItem()
         setupFloatingWindow()
         setupHotkeys()
+        setupSleepWakeMonitoring()
 
         Go2rtcServerManager.shared.start(cameras: cameras)
+    }
+
+    private func setupSleepWakeMonitoring() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(handleSystemWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleSystemWake() {
+        NSLog("☀️ TapoCamViewer: System woke from sleep. Verifying go2rtc and refreshing streams...")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self = self else { return }
+            if !Go2rtcServerManager.shared.isRunning {
+                Go2rtcServerManager.shared.start(cameras: self.cameras)
+            }
+            NotificationCenter.default.post(name: .tapoStreamsNeedReload, object: nil)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -250,6 +271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else {
             wc.showWindow(nil)
             NSApp.activate(ignoringOtherApps: true)
+            // Window is being shown again (possibly after hours hidden) — tell streams to refresh cleanly
+            NotificationCenter.default.post(name: .tapoStreamsNeedReload, object: nil)
         }
     }
 
@@ -353,11 +376,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func loadCameras() {
         guard !savedCamerasJson.isEmpty,
               let data = savedCamerasJson.data(using: .utf8),
-              let list = try? JSONDecoder().decode([TapoCameraConfig].self, from: data) else {
+              var list = try? JSONDecoder().decode([TapoCameraConfig].self, from: data) else {
             cameras = []
             return
         }
+
+        // Ensure sequential unique camera numbers starting at 1 if newly migrating
+        var seen = Set<Int>()
+        var needsResave = false
+        for i in 0..<list.count {
+            if seen.contains(list[i].cameraNumber) || list[i].cameraNumber <= 0 {
+                list[i].cameraNumber = i + 1
+                needsResave = true
+            }
+            seen.insert(list[i].cameraNumber)
+        }
+        list.sort { $0.cameraNumber < $1.cameraNumber }
         self.cameras = list
+        if needsResave {
+            saveCameras()
+        }
     }
 
     private func saveCameras() {

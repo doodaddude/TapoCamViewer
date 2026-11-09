@@ -14,6 +14,7 @@ public enum StreamQuality: String, Codable, CaseIterable {
 
 public struct TapoCameraConfig: Identifiable, Codable, Equatable {
     public var id: String
+    public var cameraNumber: Int
     public var name: String
     public var ipAddress: String
     public var port: Int
@@ -26,6 +27,7 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
 
     public init(
         id: String = UUID().uuidString,
+        cameraNumber: Int = 1,
         name: String,
         ipAddress: String,
         port: Int = 554,
@@ -37,6 +39,7 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
         customRTSPUrl: String? = nil
     ) {
         self.id = id
+        self.cameraNumber = cameraNumber
         self.name = name
         self.ipAddress = ipAddress
         self.port = port
@@ -46,6 +49,25 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
         self.quality = quality
         self.isEnabled = isEnabled
         self.customRTSPUrl = customRTSPUrl
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, cameraNumber, name, ipAddress, port, username, password, cloudPassword, quality, isEnabled, customRTSPUrl
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(String.self, forKey: .id)
+        self.cameraNumber = try container.decodeIfPresent(Int.self, forKey: .cameraNumber) ?? 1
+        self.name = try container.decode(String.self, forKey: .name)
+        self.ipAddress = try container.decode(String.self, forKey: .ipAddress)
+        self.port = try container.decodeIfPresent(Int.self, forKey: .port) ?? 554
+        self.username = try container.decodeIfPresent(String.self, forKey: .username) ?? "admin"
+        self.password = try container.decodeIfPresent(String.self, forKey: .password) ?? ""
+        self.cloudPassword = try container.decodeIfPresent(String.self, forKey: .cloudPassword) ?? ""
+        self.quality = try container.decodeIfPresent(StreamQuality.self, forKey: .quality) ?? .high
+        self.isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? true
+        self.customRTSPUrl = try container.decodeIfPresent(String.self, forKey: .customRTSPUrl)
     }
 
     public var rtspURL: String {
@@ -61,6 +83,26 @@ public struct TapoCameraConfig: Identifiable, Codable, Equatable {
         }
         return "rtsp://\(cleanUser):\(cleanPass)@\(cleanIP):\(port)/\(quality.streamPath)#transport=tcp"
     }
+}
+
+public enum TapoStreamState: Equatable {
+    case connecting
+    case playing
+    case stalled(reason: String)
+    case disconnected(reason: String)
+
+    public var isStalledOrDisconnected: Bool {
+        switch self {
+        case .stalled, .disconnected:
+            return true
+        case .connecting, .playing:
+            return false
+        }
+    }
+}
+
+extension Notification.Name {
+    public static let tapoStreamsNeedReload = Notification.Name("tapoStreamsNeedReload")
 }
 
 public struct TapoRecordingClip: Identifiable, Codable, Equatable {

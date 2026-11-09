@@ -45,6 +45,7 @@ public struct TapoSettingsView: View {
 
     // Camera Edit States
     @State private var selectedCamID: String?
+    @State private var cameraNumber: Int = 1
     @State private var name: String = ""
     @State private var ipAddress: String = ""
     @State private var port: Int = 554
@@ -76,6 +77,10 @@ public struct TapoSettingsView: View {
     @AppStorage("tapo_ui_glass_menubar") private var glassMenuBar: Bool = false
     @AppStorage("tapo_ui_contrast_boost") private var contrastBoost: Double = 1.15
     @AppStorage("tapo_ui_default_ghost_alpha") private var defaultGhostAlpha: Double = 0.25
+
+    private var sortedCameras: [TapoCameraConfig] {
+        cameras.sorted { $0.cameraNumber < $1.cameraNumber }
+    }
 
     private var currentCamera: TapoCameraConfig? {
         cameras.first(where: { $0.id == selectedCamID })
@@ -140,30 +145,61 @@ public struct TapoSettingsView: View {
                 Divider()
 
                 List(selection: $selectedCamID) {
-                    ForEach(cameras) { cam in
-                        HStack {
+                    ForEach(sortedCameras) { cam in
+                        HStack(spacing: 8) {
                             Circle()
                                 .fill(cam.isEnabled ? Color.green : Color.gray)
-                                .frame(width: 8, height: 8)
-                            VStack(alignment: .leading) {
+                                .frame(width: 7, height: 7)
+
+                            // Camera Number Capsule Badge
+                            Text("Cam \(cam.cameraNumber)")
+                                .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                .foregroundStyle(Color(red: 0.0, green: 0.85, blue: 0.95))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2.5)
+                                .background(
+                                    Capsule()
+                                        .fill(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.15))
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(Color(red: 0.0, green: 0.85, blue: 0.95).opacity(0.4), lineWidth: 0.8)
+                                        )
+                                )
+
+                            VStack(alignment: .leading, spacing: 2) {
                                 Text(cam.name.isEmpty ? "Unnamed Cam" : cam.name)
                                     .font(.system(size: 13, weight: .medium))
+                                    .lineLimit(1)
                                 Text(cam.ipAddress.isEmpty ? "No IP Set" : cam.ipAddress)
                                     .font(.system(size: 11))
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
                         }
+                        .padding(.vertical, 2)
                         .tag(cam.id)
                     }
                     .onDelete(perform: deleteCamera)
                 }
                 .listStyle(.sidebar)
             }
-            .frame(minWidth: 180)
+            .frame(minWidth: 200)
         } detail: {
             if let id = selectedCamID, let _ = cameras.first(where: { $0.id == id }) {
                 Form {
-                    Section("Camera Identification") {
+                    Section("Camera Identification & Number") {
+                        HStack {
+                            Text("Camera Number Assignment")
+                                .font(.system(size: 13, weight: .medium))
+                            Spacer()
+                            Picker("", selection: $cameraNumber) {
+                                ForEach(1...16, id: \.self) { num in
+                                    Text("Cam \(num)").tag(num)
+                                }
+                            }
+                            .frame(width: 120)
+                        }
+
                         TextField("Camera Name", text: $name)
                         Toggle("Enable Camera", isOn: $isEnabled)
                     }
@@ -234,8 +270,8 @@ public struct TapoSettingsView: View {
                     .font(.system(size: 12, weight: .semibold))
 
                 Picker("", selection: $selectedCamID) {
-                    ForEach(cameras) { cam in
-                        Text(cam.name.isEmpty ? cam.ipAddress : cam.name).tag(cam.id as String?)
+                    ForEach(sortedCameras) { cam in
+                        Text("Cam \(cam.cameraNumber): \(cam.name.isEmpty ? cam.ipAddress : cam.name)").tag(cam.id as String?)
                     }
                 }
                 .frame(width: 200)
@@ -576,25 +612,30 @@ public struct TapoSettingsView: View {
     }
 
     private func addNewCamera() {
+        let nextNum = (cameras.map(\.cameraNumber).max() ?? 0) + 1
         let newCam = TapoCameraConfig(
-            name: "Tapo Cam \(cameras.count + 1)",
+            cameraNumber: nextNum,
+            name: "Tapo Cam \(nextNum)",
             ipAddress: ""
         )
         cameras.append(newCam)
+        cameras.sort { $0.cameraNumber < $1.cameraNumber }
         selectedCamID = newCam.id
         loadSelectedCam(newCam.id)
         onSave()
     }
 
     private func deleteCamera(at offsets: IndexSet) {
-        cameras.remove(atOffsets: offsets)
-        selectedCamID = cameras.first?.id
+        let toDeleteIDs = offsets.map { sortedCameras[$0].id }
+        cameras.removeAll(where: { toDeleteIDs.contains($0.id) })
+        selectedCamID = sortedCameras.first?.id
         loadSelectedCam(selectedCamID)
         onSave()
     }
 
     private func loadSelectedCam(_ id: String?) {
         guard let id = id, let cam = cameras.first(where: { $0.id == id }) else { return }
+        cameraNumber = cam.cameraNumber
         name = cam.name
         ipAddress = cam.ipAddress
         port = cam.port
@@ -608,6 +649,7 @@ public struct TapoSettingsView: View {
 
     private func applyChanges() {
         guard let id = selectedCamID, let idx = cameras.firstIndex(where: { $0.id == id }) else { return }
+        cameras[idx].cameraNumber = cameraNumber
         cameras[idx].name = name
         cameras[idx].ipAddress = ipAddress
         cameras[idx].port = port
@@ -617,6 +659,7 @@ public struct TapoSettingsView: View {
         cameras[idx].quality = quality
         cameras[idx].isEnabled = isEnabled
         cameras[idx].customRTSPUrl = customRTSP.isEmpty ? nil : customRTSP
+        cameras.sort { $0.cameraNumber < $1.cameraNumber }
         onSave()
         refreshSecurity()
     }
